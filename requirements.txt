@@ -1,3 +1,3 @@
-langchain-gigachat==0.x.y
-langgraph==0.x.y
-python-dotenv==0.x.y
+langchain-gigachat==0.3.12
+langgraph==0.6.7
+python-dotenv==1.1.0
