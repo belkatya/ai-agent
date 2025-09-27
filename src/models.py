@@ -1,121 +1,163 @@
-from typing import Dict, List
-from langchain.tools import Tool
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
-#from typing import Optional
+from langchain.tools.base import tool
+from langchain.callbacks.manager import CallbackManagerForToolRun
 
-# Модель данных компании
-class Company(BaseModel):
-    company_name: str = Field(description="Название компании.")
-    use_crm: bool = Field(default=False, description="Использует CRM систему?")
-    erp_system: bool = Field(default=False, description="Имеется ERP система?")
-    cloud_services: bool = Field(default=False, description="Применяются облачные сервисы?")
-    big_data_analytics: bool = Field(default=False, description="Используется аналитика больших данных?")
-    digital_transformation_level: str = Field(description="Уровень цифровой трансформации.", default="low")
-    industry: str = Field(default="", description="Отрасль компании.")
+import json
 
-# Список компаний
-company_data = {
-        "company_name": "Creative Lab",
-        "use_crm": True,
-        "erp_system": False,
-        "cloud_services": True,
-        "big_data_analytics": False,
-        "digital_transformation_level": "middle"
-    }
+# Чтение JSON-файла и загрузка данных в словарь
+with open('data.json', 'r') as file:
+    data = json.load(file)
 
-company = Company(**company_data)
+# Вес каждой категории
+weights = {
+    "formalization_level": 1,
+    "automation_systems": 2,
+    "kpi_metrics": 1,
+    "data_driven_decisions": 1,
+    "it_systems_used": 2,
+    "systems_integration": 1,
+    "cloud_services_usage": 1,
+    "info_security_measures": 1,
+    "digital_literacy": 1,
+    "training_programs": 1,
+    "it_specialists_in_house": 1,
+    "employees_automation_perception": 1,
+    "it_strategy": 1,
+    "state_electronic_services": 1,
+    "future_implementation_plans": 1,
+}
 
-# Функция №1: Анализ цифровой зрелости компании
-def analyze_digital_maturity(company_name):
+significance_map = {
+    'yes': 1,
+    'mostly_yes': 0.8,
+    'mostly_no': 0.2,
+    'no': 0,
+    'unknown': None
+}
+
+max_possible_points = sum(weights.values())
+
+# Функция подсчета балла цифровой зрелости
+def calculate_digital_maturity_score() -> float:
+    total_points = 0
+    # Проходим по каждому атрибуту и его весу
+    for attr, weight in weights.items():
+        # Получаем значение атрибута из словаря data
+        value = data.get(attr)
+
+        # Проверяем наличие значения атрибута
+        if value is None:
+            raise KeyError(f'Атрибут "{attr}" отсутствует в словаре данных')
+
+        # Приводим значение к нижнему регистру и ищем соответствующее число в карте значимости
+        mapped_value = significance_map.get(value.lower())
+
+        # Проверяем, существует ли такое значение в карте значимости
+        if mapped_value is None:
+            break
+
+        # Добавляем взвешенный балл к общей сумме
+        total_points += mapped_value * weight
+
+    # Вычисляем процент готовности
+    percentage = (total_points / max_possible_points) * 100
+    return round(percentage, 2)
+
+
+
+# Функция №1:Анализ цифровой зрелости
+@tool
+def analyze_digital_maturity() -> str:
     """
     Оценивает уровень цифровой зрелости компании на основе ее характеристик.
 
-    :param company_name: Название компании
-    :type company_name: str
-    :return: Уровень цифровой зрелости компании (низкий/средний/высокий)
-    :rtype: str
     """
-    # дописать поиск компании по названию для извлечения данных из объекта
-
-    # считаем сумму признаков цифровой зрелости
-    score = sum([company.use_crm, company.erp_system, company.cloud_services, company.big_data_analytics])
-
-    if score <= 1:
-        result = "Низкая цифровая зрелость"
-    elif score <= 3:
-        result = "Средняя цифровая зрелость"
+    print("Вызвана функция: analyze_digital_maturity")
+    score = calculate_digital_maturity_score()
+    if score <= 40:
+        result = "низкий"
+    elif score <= 70:
+        result = "средний"
     else:
-        result = "Высокая цифровая зрелость"
+        result = "высокий"
+    return f'Цифровая зрелость вашей компании составляет {score}% ({result}).'
 
-    return result
+#print(analyze_digital_maturity.invoke(""))
 
-
-# Функция №2: Рекомендации по внедрению ИТ-решений
-def recommend_it_solutions(company: Company):
+# Функция №2: Рекомендации по внедрению ИТ-решений и их применению
+@tool
+def recommend_it_solutions():
     """
-    Предоставляет рекомендации по внедрению ИТ-решений на основе особенностей компании.
+        Делает рекомендации по внедрению ИТ-решений на основе данных о компании (характеристик)
 
-    :param company: Объект компании
-    :type company: Company
-    :return: Рекомендуемые ИТ-решения
-    :rtype: list[str]
     """
-    recommendations = []
+    print("Вызвана функция: recommend_it_solutions")
+    # Создаем словарь с условиями и соответствующими решениями
+    it_recommendations_map = {
+        'formalization_level': ('Нет формализации процессов', ['CRM']),
+        'automation_systems': ('Отсутствие автоматизации основных бизнес-процессов', ['СЭД']),
+        'kpi_metrics': ('Использование показателей KPI без автоматизированных решений', ['BI-система', 'Big Data Analytics']),
+        'data_driven_decisions': ('Решение задач без опоры на цифровые технологии', ['Data-driven система поддержки принятия решений']),
+        'it_systems_used': ('Необходимо больше использовать современные ИТ-системы', ['Автоматизированные системы учета и отчетности']),
+        'systems_integration': ('Невозможность интеграции существующих систем', ['Средства интеграции приложений']),
+        'cloud_services_usage': ('Недостаточное использование облачных сервисов', ['Облачные сервисы']),
+        'info_security_measures': ('Проблемы с уровнем информационной безопасности', ['Политика безопасности']),
+        'digital_literacy': ('Низкий уровень цифровой грамотности сотрудников', ['Программы повышения квалификации персонала']),
+        'training_programs': ('Отсутствуют программы обучения сотрудников', ['Программа подготовки кадров']),
+        'it_specialists_in_house': ('Отсутствие внутренних ИТ-специалистов', ['Привлечение сторонних консультантов или создание собственной команды']),
+        'employees_automation_perception': ('Негативное отношение сотрудников к автоматизации', ['Мероприятия по повышению осведомленности о преимуществах автоматизации']),
+        'it_strategy': ('Отсутствие стратегии внедрения ИТ-технологий', ['Создание ИТ-стратегии компании'])
+    }
 
-    if company.use_crm:
-        recommendations.append("CRM")
-    if company.erp_system:
-        recommendations.append("ERP")
-    if company.cloud_services:
-        recommendations.append("Облачные сервисы")
-    if company.big_data_analytics:
-        recommendations.append("Система аналитики Big Data")
+    # Список возможных рекомендаций
+    recommended_solutions = []
 
-    return ", ".join(recommendations)
+    for key in data.keys():
+        if key not in it_recommendations_map:
+            continue
+
+        condition, solutions = it_recommendations_map[key]
+        # Проверяем условие на основании значения параметра
+        value = data.get(key)
+        if (value != " ") and (value != " "):
+            recommended_solutions.extend(solutions)
+
+    return ', '.join(recommended_solutions)
 
 
-# Функция №3: Выбор мер господдержки
-grants_database = {
-    "Торговля": ["Государственный грант на развитие торговли", "Программы льготного кредитования"],
-    "Производство": ["Поддержка экспортёров", "Компенсация затрат на модернизацию оборудования"],
-    "ИТ-компания": ["Программа грантов для разработчиков", "Субсидии на развитие инфраструктуры"],
-}
+# Функция №2 дополнение: Описание конкретных ИТ-решений
 
-def select_government_support(company: Company):
+# Чтение JSON-файла и загрузка данных в словарь
+with open('IT_solutions_database.json', encoding='utf-8') as file:  # Используйте нужную кодировку
+    IT_solutions = json.load(file)
+
+@tool
+def show_all_IT_solutions() -> Dict:
     """
-    Выбирает меры господдержки для компании исходя из её отрасли.
+    Выводит подробный список всех описаний конкретных ИТ-решений из базы данных.
 
-    :param company: Объект компании
-    :type company: Company
-    :return: Доступные меры господдержки
-    :rtype: list[str]
+    Returns: Dict: Словарь с информацией об ИТ-решениях
     """
-    industry = company.industry
-    grants = grants_database.get(industry, [])
-    return ', '.join(grants)
+    print("Вызвана функция: show_all_IT_solutions")
+    IT_solutions_list = IT_solutions
+    return(IT_solutions_list)
 
+# Функция №3: Подбор мер господдержки
 
-# Массив инструментов
-tools = [
-    Tool.from_function(
-        func=analyze_digital_maturity,
-        args_schema=Company.schema(),
-        return_direct=True,
-        name="ANALYZE_DIGITAL_MATURITY",
-        description="Анализирует цифровую зрелость компании на основе характеристик."
-    ),
-    Tool.from_function(
-        func=recommend_it_solutions,
-        args_schema=Company.schema(),
-        return_direct=True,
-        name="RECOMMEND_IT_SOLUTIONS",
-        description="Рекомендует внедрение ИТ-решений на основе текущих практик компании."
-    ),
-    Tool.from_function(
-        func=select_government_support,
-        args_schema=Company.schema(),
-        return_direct=True,
-        name="SELECT_GOVERNMENT_SUPPORT",
-        description="Выбирает доступные меры господдержки на основе отрасли компании."
-    )
-]
+# Чтение JSON-файла и загрузка данных в словарь
+with open('grants_database.json', encoding='utf-8') as file:  # Используйте нужную кодировку
+    grants = json.load(file)
+
+from datetime import datetime
+
+@tool
+def show_all_available_support() -> Dict:
+    """
+    Просто выводим список всех доступных мер поддержки из базы данных.
+
+    Returns: Dict: Словарь с информацией о мерах поддержки (название и описание)
+    """
+    print("Вызвана функция: show_all_available_support")
+    available_support_list = grants
+    return(available_support_list)
